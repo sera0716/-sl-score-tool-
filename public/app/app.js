@@ -17,7 +17,7 @@ let currentUser = null;
       document.getElementById('btnAdmin').style.display = '';
     }
     if (!data.hasApiKey) {
-      alert('⚠️ サーバーにGemini APIキーが設定されていません。管理者に連絡してください。');
+      alert('⚠️ サーバーにGroq APIキーが設定されていません。管理者に連絡してください。');
     }
   } catch (e) {
     window.location.href = '/login';
@@ -50,7 +50,7 @@ async function loadAdminData() {
     const users = await usersRes.json();
 
     document.getElementById('adminStatus').innerHTML =
-      `Gemini APIキー: ${status.hasApiKey ? `✅ ${status.apiKeyPrefix}` : '❌ 未設定'}　|　登録ユーザー: ${status.userCount}人`;
+      `Groq APIキー: ${status.hasApiKey ? `✅ ${status.apiKeyPrefix}` : '❌ 未設定'}　|　登録ユーザー: ${status.userCount}人`;
 
     document.getElementById('userList').innerHTML = users.users.map(u => `
       <div class="user-row">
