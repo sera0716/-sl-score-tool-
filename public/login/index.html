@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ログイン — SL Score 構造分析ツール</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0c0e14; --bg-panel: #13151d; --bg-input: #1a1d28;
+      --border: #2a2d3a; --border-focus: #5b6abf;
+      --text: #e0e2eb; --text-dim: #7a7f95; --text-muted: #4e5268;
+      --accent: #7c8aef; --accent-glow: rgba(124,138,239,0.15);
+      --error: #d45858; --radius: 8px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      background: var(--bg); color: var(--text);
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh;
+    }
+    .login-card {
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: 16px; padding: 48px 40px; width: 400px; max-width: 90vw;
+    }
+    .logo { text-align: center; margin-bottom: 32px; }
+    .logo-mark {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 32px; font-weight: 700; color: var(--accent);
+      background: var(--accent-glow);
+      padding: 10px 18px; border-radius: var(--radius);
+      display: inline-block; letter-spacing: 3px; margin-bottom: 12px;
+    }
+    .logo h1 { font-size: 16px; font-weight: 500; }
+    .logo p { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 6px; font-weight: 500; }
+    .form-group input {
+      width: 100%; background: var(--bg-input); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 12px 16px; color: var(--text);
+      font-family: inherit; font-size: 14px; transition: border-color 0.2s;
+    }
+    .form-group input:focus { outline: none; border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--accent-glow); }
+    .btn {
+      width: 100%; padding: 14px; border: none; border-radius: var(--radius);
+      background: var(--accent); color: #fff; font-family: inherit;
+      font-size: 15px; font-weight: 500; cursor: pointer; transition: background 0.2s;
+    }
+    .btn:hover { background: #6b7ae0; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .error-msg {
+      background: rgba(212,88,88,0.1); border: 1px solid var(--error);
+      border-radius: var(--radius); padding: 10px 14px; margin-bottom: 16px;
+      font-size: 13px; color: var(--error); display: none;
+    }
+    .error-msg.show { display: block; }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="logo">
+      <div class="logo-mark">SL</div>
+      <h1>Structural Logical Score</h1>
+      <p>構造論理点 分析ツール</p>
+    </div>
+
+    <div class="error-msg" id="errorMsg"></div>
+
+    <div class="form-group">
+      <label for="username">ユーザー名</label>
+      <input type="text" id="username" autocomplete="username" autofocus>
+    </div>
+    <div class="form-group">
+      <label for="password">パスワード</label>
+      <input type="password" id="password" autocomplete="current-password">
+    </div>
+    <button class="btn" id="btnLogin" onclick="doLogin()">ログイン</button>
+  </div>
+
+  <script>
+    document.getElementById('password').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') doLogin();
+    });
+    document.getElementById('username').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') document.getElementById('password').focus();
+    });
+
+    async function doLogin() {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const errEl = document.getElementById('errorMsg');
+      const btn = document.getElementById('btnLogin');
+
+      if (!username || !password) {
+        errEl.textContent = 'ユーザー名とパスワードを入力してください';
+        errEl.classList.add('show');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'ログイン中...';
+      errEl.classList.remove('show');
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (data.success) {
+          window.location.href = '/';
+        } else {
+          errEl.textContent = data.error || 'ログインに失敗しました';
+          errEl.classList.add('show');
+        }
+      } catch (e) {
+        errEl.textContent = 'サーバーに接続できません';
+        errEl.classList.add('show');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'ログイン';
+      }
+    }
+  </script>
+</body>
+</html>
