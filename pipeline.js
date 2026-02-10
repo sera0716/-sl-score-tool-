@@ -1,5 +1,5 @@
-// pipeline.js — 多段階分析パイプライン（Gemini API版）
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+// pipeline.js — 多段階分析パイプライン（Groq API版）
+const Groq = require('groq-sdk');
 const { buildExtractionPrompt, buildMappingPrompt, buildScoringPrompt, buildVerificationPrompt } = require('./prompts');
 
 const ESC_COEFFICIENTS = [0.60, 0.60, 1.25, 1.25, 0.80, 0.80, 1.15, 1.35, 1.25, 1.60, 1.25, 1.50, 1.60, 1.00];
@@ -12,9 +12,6 @@ const ITEM_NAMES = [
   'クライマックス', '結末'
 ];
 
-/**
- * テキストをタブ/話ごとにチャンクに分割
- */
 function splitIntoChunks(text, chunksPerGroup = 8) {
   const tabPattern = /(?=タブ\s*\d+|＜第\d+話＞|スピンオフ)/g;
   const parts = text.split(tabPattern).filter(p => p.trim().length > 0);
@@ -46,46 +43,34 @@ function splitIntoChunks(text, chunksPerGroup = 8) {
   return groups;
 }
 
-/**
- * Gemini APIを呼び出す（リトライ付き）
- */
-async function callGemini(genAI, prompt, modelName, maxRetries = 2) {
+async function callGroq(client, prompt, modelName, maxRetries = 3) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const model = genAI.getGenerativeModel({
+      const response = await client.chat.completions.create({
         model: modelName,
-        generationConfig: {
-          maxOutputTokens: 16000,
-          temperature: 0.3,  // 分析タスクなので低め
-        }
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 16000,
+        temperature: 0.3,
       });
 
-      const result = await model.generateContent(prompt);
-      const response = result.response;
-      const text = response.text();
-
+      const text = response.choices[0]?.message?.content;
       if (!text || text.trim().length === 0) {
         throw new Error('空のレスポンスが返されました');
       }
-
       return text;
     } catch (err) {
       if (attempt === maxRetries) throw err;
 
-      // レート制限（429）の場合は長めに待つ
-      const isRateLimit = err.message?.includes('429') || err.message?.includes('RESOURCE_EXHAUSTED');
-      const waitMs = isRateLimit ? 15000 * (attempt + 1) : 3000 * (attempt + 1);
+      const isRateLimit = err.status === 429 || err.message?.includes('429') || err.message?.includes('rate_limit');
+      const waitMs = isRateLimit ? 30000 * (attempt + 1) : 5000 * (attempt + 1);
 
-      console.error(`Gemini API呼出失敗 (${attempt + 1}/${maxRetries + 1}): ${err.message}`);
+      console.error(`Groq API呼出失敗 (${attempt + 1}/${maxRetries + 1}): ${err.message}`);
       console.error(`${waitMs / 1000}秒後にリトライ...`);
       await new Promise(r => setTimeout(r, waitMs));
     }
   }
 }
 
-/**
- * ESCスコアを計算する
- */
 function calculateESC(scores) {
   const w1 = scores.reduce((a, b) => a + b, 0) / scores.length;
   const weighted = scores.map((s, i) => s * ESC_COEFFICIENTS[i]);
@@ -100,9 +85,6 @@ function calculateESC(scores) {
   };
 }
 
-/**
- * 採点結果テキストからスコアを抽出
- */
 function parseScores(scoringText) {
   const scores = [];
   for (let i = 1; i <= 14; i++) {
@@ -125,13 +107,10 @@ function parseScores(scoringText) {
   return scores;
 }
 
-/**
- * メインパイプライン実行
- */
 async function runPipeline(config, onProgress) {
   const { apiKey, model, protagonist, genre, theme, symbols, keyCharacters, storyText, skipVerification } = config;
 
-  const genAI = new GoogleGenerativeAI(apiKey);
+  const client = new Groq({ apiKey });
   const results = { phases: {}, finalScore: null, errors: [] };
 
   // ===== Phase 1: 分割精読 =====
@@ -157,13 +136,13 @@ async function runPipeline(config, onProgress) {
         chunkIndex: i + 1
       });
 
-      const result = await callGemini(genAI, prompt, model);
+      const result = await callGroq(client, prompt, model);
       extractions.push({ label: chunks[i].label, result });
 
-      // Gemini無料枠のレート制限対策（RPM制限）
+      // Groqレート制限対策
       if (i < chunks.length - 1) {
         onProgress({ phase: 1, status: 'info', message: 'レート制限回避のため少し待機...' });
-        await new Promise(r => setTimeout(r, 4000));
+        await new Promise(r => setTimeout(r, 3000));
       }
     } catch (err) {
       results.errors.push(`Phase 1 (${chunks[i].label}): ${err.message}`);
@@ -176,15 +155,13 @@ async function runPipeline(config, onProgress) {
 
   // ===== Phase 2: 構造マッピング =====
   onProgress({ phase: 2, status: 'start', message: 'Phase 2: 構造マッピング開始' });
-  await new Promise(r => setTimeout(r, 3000)); // レート制限対策
+  await new Promise(r => setTimeout(r, 3000));
 
   const allExtractions = extractions.map(e => `\n=== ${e.label} ===\n${e.result}`).join('\n\n');
 
   try {
-    const mappingPrompt = buildMappingPrompt({
-      protagonist, genre, theme, symbols, allExtractions
-    });
-    const mappingResult = await callGemini(genAI, mappingPrompt, model);
+    const mappingPrompt = buildMappingPrompt({ protagonist, genre, theme, symbols, allExtractions });
+    const mappingResult = await callGroq(client, mappingPrompt, model);
     results.phases.mapping = mappingResult;
     onProgress({ phase: 2, status: 'complete', message: 'Phase 2 完了: 構造マッピング完了' });
   } catch (err) {
@@ -198,11 +175,8 @@ async function runPipeline(config, onProgress) {
   await new Promise(r => setTimeout(r, 3000));
 
   try {
-    const scoringPrompt = buildScoringPrompt({
-      protagonist, genre, theme, symbols,
-      mappingResult: results.phases.mapping
-    });
-    const scoringResult = await callGemini(genAI, scoringPrompt, model);
+    const scoringPrompt = buildScoringPrompt({ protagonist, genre, theme, symbols, mappingResult: results.phases.mapping });
+    const scoringResult = await callGroq(client, scoringPrompt, model);
     results.phases.scoring = scoringResult;
 
     const scores = parseScores(scoringResult);
@@ -223,11 +197,8 @@ async function runPipeline(config, onProgress) {
     await new Promise(r => setTimeout(r, 3000));
 
     try {
-      const verificationPrompt = buildVerificationPrompt({
-        protagonist, theme, symbols,
-        scoringResult: results.phases.scoring
-      });
-      const verificationResult = await callGemini(genAI, verificationPrompt, model);
+      const verificationPrompt = buildVerificationPrompt({ protagonist, theme, symbols, scoringResult: results.phases.scoring });
+      const verificationResult = await callGroq(client, verificationPrompt, model);
       results.phases.verification = verificationResult;
       onProgress({ phase: 4, status: 'complete', message: 'Phase 4 完了: 検証結果出力済み' });
     } catch (err) {

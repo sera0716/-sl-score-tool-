@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 const ADMIN_DEFAULT_PW = process.env.ADMIN_DEFAULT_PASSWORD || 'slscore2024';
 
 function getApiKey() {
-  return process.env.GEMINI_API_KEY || null;
+  return process.env.GROQ_API_KEY || null;
 }
 
 app.set('trust proxy', 1); // Render等のリバースプロキシ対応
@@ -125,7 +125,7 @@ app.post('/api/preview-chunks', (req, res) => {
 
 app.post('/api/analyze', (req, res) => {
   const apiKey = getApiKey();
-  if (!apiKey) return res.status(500).json({ error: 'Gemini APIキー未設定。管理者に連絡してください。' });
+  if (!apiKey) return res.status(500).json({ error: 'Groq APIキー未設定。管理者に連絡してください。' });
 
   const { model, protagonist, genre, theme, symbols, keyCharacters, storyText, skipVerification } = req.body;
   if (!storyText) return res.status(400).json({ error: 'テキストが空です' });
@@ -137,7 +137,7 @@ app.post('/api/analyze', (req, res) => {
   console.log(`[ANALYZE] ${user.displayName}(${user.username}) 分析開始 主人公:${protagonist}`);
 
   runPipeline(
-    { apiKey, model: model || 'gemini-2.0-flash', protagonist, genre, theme, symbols, keyCharacters, storyText, skipVerification },
+    { apiKey, model: model || 'llama-3.3-70b-versatile', protagonist, genre, theme, symbols, keyCharacters, storyText, skipVerification },
     (progress) => sendEvent({ type: 'progress', ...progress })
   ).then(results => {
     sendEvent({ type: 'result', results });
@@ -159,10 +159,10 @@ ensureAdmin(ADMIN_DEFAULT_PW);
 app.listen(PORT, () => {
   const hasKey = !!getApiKey();
   console.log(`\n╔═══════════════════════════════════════════════════╗`);
-  console.log(`║  SL Score 構造分析ツール v2.1（Gemini API版）       ║`);
+  console.log(`║  SL Score 構造分析ツール v2.2（Groq API版）         ║`);
   console.log(`║  http://localhost:${PORT}                           ║`);
   console.log(`║                                                   ║`);
-  console.log(`║  Gemini APIキー: ${hasKey ? '✅ 設定済み' : '❌ 未設定（.envに追加）'}                  ║`);
+  console.log(`║  Groq APIキー: ${hasKey ? '✅ 設定済み' : '❌ 未設定（.envに追加）'}                   ║`);
   console.log(`║  初期管理者   : admin / ${ADMIN_DEFAULT_PW}                    ║`);
   console.log(`╚═══════════════════════════════════════════════════╝\n`);
 });
