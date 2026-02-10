@@ -49,7 +49,7 @@ async function callGroq(client, prompt, modelName, maxRetries = 3) {
       const response = await client.chat.completions.create({
         model: modelName,
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 16000,
+        max_tokens: 8000,
         temperature: 0.3,
       });
 
@@ -142,7 +142,7 @@ async function runPipeline(config, onProgress) {
       // Groqレート制限対策
       if (i < chunks.length - 1) {
         onProgress({ phase: 1, status: 'info', message: 'レート制限回避のため少し待機...' });
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 5000));
       }
     } catch (err) {
       results.errors.push(`Phase 1 (${chunks[i].label}): ${err.message}`);
@@ -153,16 +153,28 @@ async function runPipeline(config, onProgress) {
   results.phases.extraction = extractions;
   onProgress({ phase: 1, status: 'complete', message: `Phase 1 完了: ${extractions.length}チャンク処理済み` });
 
-  // ===== Phase 2: 構造マッピング =====
+  // ===== Phase 2: 構造マッピング（分割対応）=====
   onProgress({ phase: 2, status: 'start', message: 'Phase 2: 構造マッピング開始' });
-  await new Promise(r => setTimeout(r, 3000));
-
-  const allExtractions = extractions.map(e => `\n=== ${e.label} ===\n${e.result}`).join('\n\n');
+  onProgress({ phase: 2, status: 'info', message: 'トークン制限回避のため60秒待機...' });
+  await new Promise(r => setTimeout(r, 60000));
 
   try {
-    const mappingPrompt = buildMappingPrompt({ protagonist, genre, theme, symbols, allExtractions });
-    const mappingResult = await callGroq(client, mappingPrompt, model);
-    results.phases.mapping = mappingResult;
+    const halfIdx = Math.ceil(extractions.length / 2);
+    const firstHalf = extractions.slice(0, halfIdx).map(e => `=== ${e.label} ===\n${e.result}`).join('\n\n');
+    const secondHalf = extractions.slice(halfIdx).map(e => `=== ${e.label} ===\n${e.result}`).join('\n\n');
+
+    onProgress({ phase: 2, status: 'progress', message: 'マッピング前半（1/2）処理中...' });
+    const mappingPrompt1 = buildMappingPrompt({ protagonist, genre, theme, symbols, allExtractions: firstHalf });
+    const mappingResult1 = await callGroq(client, mappingPrompt1, model);
+
+    onProgress({ phase: 2, status: 'info', message: 'トークン制限回避のため60秒待機...' });
+    await new Promise(r => setTimeout(r, 60000));
+
+    onProgress({ phase: 2, status: 'progress', message: 'マッピング後半（2/2）処理中...' });
+    const mappingPrompt2 = buildMappingPrompt({ protagonist, genre, theme, symbols, allExtractions: secondHalf });
+    const mappingResult2 = await callGroq(client, mappingPrompt2, model);
+
+    results.phases.mapping = `【前半分析】\n${mappingResult1}\n\n【後半分析】\n${mappingResult2}`;
     onProgress({ phase: 2, status: 'complete', message: 'Phase 2 完了: 構造マッピング完了' });
   } catch (err) {
     results.errors.push(`Phase 2: ${err.message}`);
@@ -172,7 +184,8 @@ async function runPipeline(config, onProgress) {
 
   // ===== Phase 3: 採点 =====
   onProgress({ phase: 3, status: 'start', message: 'Phase 3: 採点開始' });
-  await new Promise(r => setTimeout(r, 3000));
+  onProgress({ phase: 3, status: 'info', message: 'トークン制限回避のため60秒待機...' });
+  await new Promise(r => setTimeout(r, 60000));
 
   try {
     const scoringPrompt = buildScoringPrompt({ protagonist, genre, theme, symbols, mappingResult: results.phases.mapping });
@@ -194,7 +207,8 @@ async function runPipeline(config, onProgress) {
   // ===== Phase 4: 逆方向検証（オプション）=====
   if (!skipVerification) {
     onProgress({ phase: 4, status: 'start', message: 'Phase 4: 逆方向検証開始（見落とし検出）' });
-    await new Promise(r => setTimeout(r, 3000));
+    onProgress({ phase: 4, status: 'info', message: 'トークン制限回避のため60秒待機...' });
+    await new Promise(r => setTimeout(r, 60000));
 
     try {
       const verificationPrompt = buildVerificationPrompt({ protagonist, theme, symbols, scoringResult: results.phases.scoring });
