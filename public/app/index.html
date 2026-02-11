@@ -3,222 +3,228 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SL Score 構造分析ツール</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <title>SL Score 構造分析ツール v3.0</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="app">
-    <!-- Header -->
-    <header class="header">
-      <div class="header-inner">
-        <div class="logo">
-          <span class="logo-mark">SL</span>
-          <div class="logo-text">
-            <h1>Structural Logical Score</h1>
-            <p>構造論理点 分析ツール <span class="version">Ver.13.1A</span></p>
-          </div>
+
+<div class="copy-toast" id="copyToast">クリップボードにコピーしました</div>
+
+<div class="header">
+  <h1>📐 SL Score <span>構造分析ツール</span></h1>
+  <div class="header-right">
+    <span class="version">v3.0 ハイブリッド版</span>
+    <span id="userName" style="font-size:13px; color:#9498b0;"></span>
+    <button class="btn-sm" onclick="logout()">ログアウト</button>
+  </div>
+</div>
+
+<div class="container">
+  <!-- Step Tabs -->
+  <div class="steps" id="stepTabs">
+    <div class="step-tab active" data-step="0" onclick="goStep(0)"><span class="step-num">1</span>作品情報</div>
+    <div class="step-tab" data-step="1" onclick="goStep(1)"><span class="step-num">2</span>Phase 1 抽出</div>
+    <div class="step-tab" data-step="2" onclick="goStep(2)"><span class="step-num">3</span>Phase 2 マッピング</div>
+    <div class="step-tab" data-step="3" onclick="goStep(3)"><span class="step-num">4</span>Phase 3 採点</div>
+    <div class="step-tab" data-step="4" onclick="goStep(4)"><span class="step-num">5</span>スコア算出</div>
+  </div>
+
+  <!-- ===== Step 0: 作品情報 ===== -->
+  <div class="panel active" id="panel-0">
+    <div class="card">
+      <h2>📝 作品情報の入力</h2>
+      <div class="instruction">
+        <strong>使い方：</strong>作品情報を入力すると、各フェーズの最適化プロンプトが自動生成されます。<br>
+        生成されたプロンプトをお手持ちのAI（ChatGPT、Claude等）に貼り付けて分析を進めてください。<br>
+        <strong>APIキーは不要です！</strong>
+      </div>
+
+      <div class="form-group">
+        <label>主人公／視点主 <span class="required">*必須</span></label>
+        <input type="text" id="protagonist" placeholder="例：咲夜（紫園家次男→勘当→何でも屋代表→優真の執事長）">
+      </div>
+      <div class="form-group">
+        <label>ジャンル</label>
+        <input type="text" id="genre" placeholder="例：ブロマンス（恋愛のないバディもの）">
+      </div>
+      <div class="form-group">
+        <label>主題の問い（仮説）</label>
+        <input type="text" id="theme" placeholder="例：煙の壁で距離を保つ男が、壁を捨てて隣に立つ覚悟を持てるか">
+      </div>
+      <div class="form-group">
+        <label>追跡すべき象徴・モチーフ</label>
+        <input type="text" id="symbols" placeholder="例：タバコ＝距離の壁、禁煙＝献身の覚悟">
+      </div>
+      <div class="form-group">
+        <label>主要キャラクター</label>
+        <input type="text" id="keyCharacters" placeholder="例：優真、夕立、利人、龍崎、壱馬、東條、日野、柚原">
+      </div>
+      <div class="form-group">
+        <label>物語テキスト <span class="required">*必須</span></label>
+        <textarea id="storyText" rows="10" placeholder="作品全文または概要をここに貼り付けてください..."></textarea>
+        <div class="char-count"><span id="charCount">0</span> 文字</div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="startAnalysis()">プロンプト生成を開始 →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Step 1: Phase 1 ===== -->
+  <div class="panel" id="panel-1">
+    <div class="card phase1">
+      <h2><span class="badge">Phase 1</span> 構造要素の抽出</h2>
+      <div class="instruction">
+        <strong>手順：</strong>
+        <ol>
+          <li>下のプロンプトを「コピー」ボタンでコピー</li>
+          <li>お手持ちのAI（ChatGPT、Claude等）に貼り付けて実行</li>
+          <li>AIの回答を下の「AIの回答を貼り付け」欄にペースト</li>
+          <li>「次へ進む」をクリック</li>
+        </ol>
+        ⚠️ テキストが長い場合、AIに「続きを出力して」と指示して全文を取得してください。
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <div class="phase-indicator"><span class="phase-dot p1"></span>Phase 1 プロンプト（<span id="p1CharCount">0</span>文字）</div>
+        <div>
+          <button class="btn-sm" onclick="copyPrompt('p1Prompt')">📋 コピー</button>
+          <button class="toggle-btn" onclick="toggleCollapse('p1Prompt')">展開/折りたたみ</button>
         </div>
-        <div class="header-right">
-          <div class="header-badge">ガイドライン内蔵</div>
-          <div class="user-info" id="userInfo">
-            <span id="userDisplay" class="user-name"></span>
-            <button class="btn btn-sm" id="btnAdmin" onclick="toggleAdmin()" style="display:none">管理</button>
-            <button class="btn btn-sm" onclick="doLogout()">ログアウト</button>
+      </div>
+      <div class="prompt-box collapsed" id="p1Prompt"></div>
+
+      <div class="form-group" style="margin-top:16px;">
+        <label>AIの回答を貼り付け <span class="required">*必須</span></label>
+        <textarea class="response-area" id="p1Response" rows="8" placeholder="Phase 1のAI回答をここに貼り付け..."></textarea>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="goStep(0)">← 戻る</button>
+        <button class="btn btn-primary" onclick="nextPhase(1)">Phase 2 プロンプトを生成 →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Step 2: Phase 2 ===== -->
+  <div class="panel" id="panel-2">
+    <div class="card phase2">
+      <h2><span class="badge">Phase 2</span> 構造マッピング</h2>
+      <div class="instruction">
+        <strong>手順：</strong>Phase 1と同様に、プロンプトをコピー → AIで実行 → 回答を貼り付け。<br>
+        ⚠️ このプロンプトにはガイドライン全文が含まれるため長いです。AIの入力制限にご注意ください。
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <div class="phase-indicator"><span class="phase-dot p2"></span>Phase 2 プロンプト（<span id="p2CharCount">0</span>文字）</div>
+        <div>
+          <button class="btn-sm" onclick="copyPrompt('p2Prompt')">📋 コピー</button>
+          <button class="toggle-btn" onclick="toggleCollapse('p2Prompt')">展開/折りたたみ</button>
+        </div>
+      </div>
+      <div class="prompt-box collapsed" id="p2Prompt"></div>
+
+      <div class="form-group" style="margin-top:16px;">
+        <label>AIの回答を貼り付け <span class="required">*必須</span></label>
+        <textarea class="response-area" id="p2Response" rows="8" placeholder="Phase 2のAI回答をここに貼り付け..."></textarea>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="goStep(1)">← 戻る</button>
+        <button class="btn btn-primary" onclick="nextPhase(2)">Phase 3 プロンプトを生成 →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Step 3: Phase 3 ===== -->
+  <div class="panel" id="panel-3">
+    <div class="card phase3">
+      <h2><span class="badge">Phase 3</span> 採点</h2>
+      <div class="instruction">
+        <strong>手順：</strong>プロンプトをコピー → AIで実行 → 採点結果を貼り付け。<br>
+        AIの出力に「採点一覧」テーブルが含まれていることを確認してください。
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <div class="phase-indicator"><span class="phase-dot p3"></span>Phase 3 プロンプト（<span id="p3CharCount">0</span>文字）</div>
+        <div>
+          <button class="btn-sm" onclick="copyPrompt('p3Prompt')">📋 コピー</button>
+          <button class="toggle-btn" onclick="toggleCollapse('p3Prompt')">展開/折りたたみ</button>
+        </div>
+      </div>
+      <div class="prompt-box collapsed" id="p3Prompt"></div>
+
+      <div class="form-group" style="margin-top:16px;">
+        <label>AIの回答（採点結果）を貼り付け <span class="required">*必須</span></label>
+        <textarea class="response-area" id="p3Response" rows="8" placeholder="Phase 3のAI回答（採点結果）をここに貼り付け..."></textarea>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="goStep(2)">← 戻る</button>
+        <button class="btn btn-primary" onclick="calculateScores()">スコアを自動算出 →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Step 4: Score Results ===== -->
+  <div class="panel" id="panel-4">
+    <div class="card">
+      <h2>📊 SL Score 算出結果</h2>
+
+      <div class="final-score-box" id="finalScoreBox">
+        <div class="label">補正ESCスコア（最終合成）</div>
+        <div class="score" id="finalScore">—</div>
+        <div class="sub-scores">
+          <div class="sub-score">
+            <div class="val" id="w1Score">—</div>
+            <div class="lbl">W1 構成点</div>
+          </div>
+          <div class="sub-score">
+            <div class="val" id="w2Score">—</div>
+            <div class="lbl">W2 ESCスコア</div>
           </div>
         </div>
       </div>
-    </header>
 
-    <!-- Main Content -->
-    <main class="main">
-      <!-- Step 1: 設定 -->
-      <section class="panel" id="panel-config">
-        <div class="panel-header">
-          <span class="step-num">01</span>
-          <h2>作品情報・設定</h2>
-        </div>
-        <div class="panel-body">
-          <div class="form-grid">
-            <div class="form-group">
-              <label for="model">モデル</label>
-            <select id="model">
-                <option value="llama-3.3-70b-versatile">Llama 3.3 70B（推奨・高精度）</option>
-                <option value="llama-3.1-8b-instant">Llama 3.1 8B（高速・軽量）</option>
-                <option value="gemma2-9b-it">Gemma 2 9B（バランス型）</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="protagonist">主人公／視点主 <span class="required">*</span></label>
-              <input type="text" id="protagonist" placeholder="例：咲夜">
-            </div>
-            <div class="form-group">
-              <label for="genre">ジャンル</label>
-              <input type="text" id="genre" placeholder="例：ブロマンス（恋愛のないバディもの）">
-            </div>
-            <div class="form-group full-width">
-              <label for="theme">主題の問い（仮説）</label>
-              <input type="text" id="theme" placeholder="例：煙の壁で距離を保つ男が、壁を捨てて隣に立つ覚悟を持てるか">
-              <small>不明な場合は空欄でOK。Phase 2で自動推定されます</small>
-            </div>
-            <div class="form-group">
-              <label for="symbols">追跡する象徴・モチーフ</label>
-              <input type="text" id="symbols" placeholder="例：タバコ、火、心臓、距離">
-            </div>
-            <div class="form-group">
-              <label for="keyCharacters">主要キャラクター</label>
-              <input type="text" id="keyCharacters" placeholder="例：優真、夕立、利人、龍崎">
-            </div>
-          </div>
-          <div class="form-group full-width">
-            <label class="checkbox-label">
-              <input type="checkbox" id="skipVerification">
-              Phase 4（逆方向検証）をスキップ（処理時間短縮）
-            </label>
-          </div>
-        </div>
-      </section>
+      <div id="autoParseMsg" style="margin-bottom:12px;"></div>
 
-      <!-- Step 2: テキスト入力 -->
-      <section class="panel" id="panel-text">
-        <div class="panel-header">
-          <span class="step-num">02</span>
-          <h2>作品テキスト</h2>
-          <div class="panel-actions">
-            <button class="btn btn-sm" id="btnPreview" onclick="previewChunks()">分割プレビュー</button>
-            <span id="charCount" class="char-count">0文字</span>
-          </div>
-        </div>
-        <div class="panel-body">
-          <textarea id="storyText" placeholder="作品のテキストをここに貼り付けてください。&#10;&#10;10万文字超でも対応。自動的にチャプター単位で分割し、段階的に精読します。"></textarea>
-          <div id="chunkPreview" class="chunk-preview hidden"></div>
-        </div>
-      </section>
+      <h3 style="font-size:14px; margin-bottom:8px;">各項目スコア</h3>
+      <table class="score-table" id="scoreTable">
+        <thead>
+          <tr><th>No.</th><th>項目</th><th>素点</th><th>ESC係数</th><th>加重点</th></tr>
+        </thead>
+        <tbody id="scoreBody"></tbody>
+      </table>
 
-      <!-- 実行ボタン -->
-      <div class="action-bar">
-        <button class="btn btn-primary btn-lg" id="btnAnalyze" onclick="startAnalysis()">
-          <span class="btn-icon">▶</span>
-          分析開始
-        </button>
-        <p class="action-note">Phase 1〜4を自動実行し、最終採点結果を出力します</p>
+      <div class="btn-row" style="margin-top:20px;">
+        <button class="btn btn-secondary" onclick="goStep(3)">← 採点に戻る</button>
+        <button class="btn btn-secondary" onclick="generatePhase4()">Phase 4（検証）プロンプト生成</button>
+        <button class="btn btn-success" onclick="exportReport()">📄 レポート出力</button>
       </div>
 
-      <!-- Step 3: 進行状況 -->
-      <section class="panel hidden" id="panel-progress">
-        <div class="panel-header">
-          <span class="step-num">03</span>
-          <h2>分析進行状況</h2>
-          <span id="elapsedTime" class="elapsed">00:00</span>
-        </div>
-        <div class="panel-body">
-          <div class="phase-tracker">
-            <div class="phase-item" id="phase-1">
-              <div class="phase-indicator"></div>
-              <div class="phase-info">
-                <h3>Phase 1：分割精読</h3>
-                <p class="phase-desc">各チャンクを精読し、構造要素を抽出</p>
-                <div class="progress-bar"><div class="progress-fill" id="progress-1"></div></div>
-              </div>
-            </div>
-            <div class="phase-item" id="phase-2">
-              <div class="phase-indicator"></div>
-              <div class="phase-info">
-                <h3>Phase 2：構造マッピング</h3>
-                <p class="phase-desc">14項目への対応付け・因果検証</p>
-                <div class="progress-bar"><div class="progress-fill" id="progress-2"></div></div>
-              </div>
-            </div>
-            <div class="phase-item" id="phase-3">
-              <div class="phase-indicator"></div>
-              <div class="phase-info">
-                <h3>Phase 3：採点</h3>
-                <p class="phase-desc">ガイドライン準拠の厳密採点</p>
-                <div class="progress-bar"><div class="progress-fill" id="progress-3"></div></div>
-              </div>
-            </div>
-            <div class="phase-item" id="phase-4">
-              <div class="phase-indicator"></div>
-              <div class="phase-info">
-                <h3>Phase 4：逆方向検証</h3>
-                <p class="phase-desc">見落とし・誤認・バイアス検出</p>
-                <div class="progress-bar"><div class="progress-fill" id="progress-4"></div></div>
-              </div>
+      <!-- Phase 4 (optional) -->
+      <div id="phase4Section" style="display:none; margin-top:24px;">
+        <div class="card phase4">
+          <h2><span class="badge">Phase 4</span> 逆方向検証（オプション）</h2>
+          <div class="instruction">
+            採点結果の見落としや過大/過小評価を検証します。必須ではありませんが、精度向上に有効です。
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div class="phase-indicator"><span class="phase-dot p4"></span>Phase 4 プロンプト（<span id="p4CharCount">0</span>文字）</div>
+            <div>
+              <button class="btn-sm" onclick="copyPrompt('p4Prompt')">📋 コピー</button>
+              <button class="toggle-btn" onclick="toggleCollapse('p4Prompt')">展開/折りたたみ</button>
             </div>
           </div>
-          <div id="logContainer" class="log-container">
-            <div id="logContent"></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Step 4: 結果 -->
-      <section class="panel hidden" id="panel-results">
-        <div class="panel-header">
-          <span class="step-num">04</span>
-          <h2>採点結果</h2>
-          <div class="panel-actions">
-            <button class="btn btn-sm" onclick="copyResults()">結果をコピー</button>
-            <button class="btn btn-sm" onclick="downloadResults()">Markdownで保存</button>
-          </div>
-        </div>
-        <div class="panel-body">
-          <!-- スコアサマリー -->
-          <div id="scoreSummary" class="score-summary"></div>
-
-          <!-- タブ切替 -->
-          <div class="result-tabs">
-            <button class="tab active" onclick="switchTab('scoring')">採点結果</button>
-            <button class="tab" onclick="switchTab('mapping')">構造マッピング</button>
-            <button class="tab" onclick="switchTab('extraction')">精読データ</button>
-            <button class="tab" onclick="switchTab('verification')">検証結果</button>
-          </div>
-
-          <div id="resultContent" class="result-content"></div>
-        </div>
-      </section>
-    </main>
-
-    <!-- Admin Panel (Modal) -->
-    <div class="modal-overlay hidden" id="adminModal">
-      <div class="modal">
-        <div class="modal-header">
-          <h2>ユーザー管理</h2>
-          <button class="btn btn-sm" onclick="toggleAdmin()">✕ 閉じる</button>
-        </div>
-        <div class="modal-body">
-          <div id="adminStatus" style="margin-bottom:16px;font-size:13px;color:var(--text-dim)"></div>
-
-          <h3 style="font-size:14px;margin-bottom:12px;">ユーザー追加</h3>
-          <div class="form-grid" style="margin-bottom:20px;">
-            <div class="form-group">
-              <label>ユーザー名</label>
-              <input type="text" id="newUsername" placeholder="英数字">
-            </div>
-            <div class="form-group">
-              <label>表示名</label>
-              <input type="text" id="newDisplayName" placeholder="任意">
-            </div>
-            <div class="form-group">
-              <label>パスワード</label>
-              <input type="password" id="newPassword" placeholder="6文字以上">
-            </div>
-            <div class="form-group" style="justify-content:flex-end;">
-              <button class="btn btn-primary" onclick="addNewUser()">追加</button>
-            </div>
-          </div>
-
-          <h3 style="font-size:14px;margin-bottom:12px;">登録ユーザー</h3>
-          <div id="userList"></div>
+          <div class="prompt-box collapsed" id="p4Prompt"></div>
         </div>
       </div>
     </div>
-
-    <footer class="footer">
-      <p>SL Score ガイドライン Ver.13.1A 内蔵｜Anthropic Claude API使用</p>
-    </footer>
   </div>
-  <script src="app.js"></script>
+
+</div>
+
+<script src="app.js"></script>
 </body>
 </html>

@@ -1,370 +1,277 @@
-// app.js — クライアントサイドロジック（認証対応版）
+// app.js — SL Score v3.0 ハイブリッド版 クライアント
 
-let analysisResults = null;
-let timerInterval = null;
-let startTime = null;
-let currentUser = null;
+const ITEM_NAMES = [
+  'オープニングイメージ','セットアップ','インサイティング・インシデント',
+  'ターニングポイント1','サブプロット','お楽しみ要素',
+  'ピンチポイント1','ミッドポイント','ピンチポイント2',
+  'すべてを失う','再起のきっかけ','ターニングポイント2',
+  'クライマックス','結末'
+];
+const ESC_COEFFICIENTS = [0.60,0.60,1.25,1.25,0.80,0.80,1.15,1.35,1.25,1.60,1.25,1.50,1.60,1.00];
 
-// ページ読み込み時に認証チェック
-(async function init() {
+let currentStep = 0;
+let storyMeta = {};
+let phaseResults = {};
+
+// === Auth ===
+async function checkAuth() {
   try {
     const res = await fetch('/api/auth/me');
-    if (res.status === 401) { window.location.href = '/login'; return; }
+    if (!res.ok) { window.location.href = '/login'; return; }
     const data = await res.json();
-    currentUser = data.user;
-    document.getElementById('userDisplay').textContent = data.user.displayName;
-    if (data.user.role === 'admin') {
-      document.getElementById('btnAdmin').style.display = '';
-    }
-    if (!data.hasApiKey) {
-      alert('⚠️ サーバーにGroq APIキーが設定されていません。管理者に連絡してください。');
-    }
-  } catch (e) {
-    window.location.href = '/login';
-  }
-})();
-
-async function doLogout() {
+    document.getElementById('userName').textContent = data.user.displayName || data.user.username;
+  } catch { window.location.href = '/login'; }
+}
+async function logout() {
   await fetch('/api/auth/logout', { method: 'POST' });
   window.location.href = '/login';
 }
 
-// === 管理パネル ===
-async function toggleAdmin() {
-  const modal = document.getElementById('adminModal');
-  if (modal.classList.contains('hidden')) {
-    modal.classList.remove('hidden');
-    await loadAdminData();
-  } else {
-    modal.classList.add('hidden');
-  }
+// === Step Navigation ===
+function goStep(n) {
+  if (n > currentStep + 1) return; // can't skip ahead
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.step-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`panel-${n}`).classList.add('active');
+  document.querySelector(`.step-tab[data-step="${n}"]`).classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-async function loadAdminData() {
-  try {
-    const [statusRes, usersRes] = await Promise.all([
-      fetch('/api/admin/status'),
-      fetch('/api/admin/users')
-    ]);
-    const status = await statusRes.json();
-    const users = await usersRes.json();
-
-    document.getElementById('adminStatus').innerHTML =
-      `Groq APIキー: ${status.hasApiKey ? `✅ ${status.apiKeyPrefix}` : '❌ 未設定'}　|　登録ユーザー: ${status.userCount}人`;
-
-    document.getElementById('userList').innerHTML = users.users.map(u => `
-      <div class="user-row">
-        <span class="name"><strong>${u.displayName}</strong> (${u.username})</span>
-        <span class="role ${u.role}">${u.role}</span>
-        <span class="meta">${u.lastLogin ? '最終: ' + new Date(u.lastLogin).toLocaleDateString('ja-JP') : '未ログイン'}</span>
-        ${u.role !== 'admin' ? `<button class="btn btn-sm" onclick="deleteUser('${u.username}')">削除</button>` : ''}
-      </div>
-    `).join('');
-  } catch (e) {
-    console.error(e);
-  }
+function markDone(n) {
+  const tab = document.querySelector(`.step-tab[data-step="${n}"]`);
+  if (tab) tab.classList.add('done');
+  if (n >= currentStep) currentStep = n + 1;
 }
 
-async function addNewUser() {
-  const username = document.getElementById('newUsername').value.trim();
-  const displayName = document.getElementById('newDisplayName').value.trim();
-  const password = document.getElementById('newPassword').value;
-  if (!username || !password) return alert('ユーザー名とパスワードは必須です');
-
-  const res = await fetch('/api/admin/users', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, displayName, password })
-  });
-  const data = await res.json();
-  if (data.error) return alert(data.error);
-  document.getElementById('newUsername').value = '';
-  document.getElementById('newDisplayName').value = '';
-  document.getElementById('newPassword').value = '';
-  await loadAdminData();
+// === Utilities ===
+function showToast(msg) {
+  const t = document.getElementById('copyToast');
+  t.textContent = msg || 'クリップボードにコピーしました';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
 }
 
-async function deleteUser(username) {
-  if (!confirm(`${username} を削除しますか？`)) return;
-  const res = await fetch(`/api/admin/users/${username}`, { method: 'DELETE' });
-  const data = await res.json();
-  if (data.error) return alert(data.error);
-  await loadAdminData();
+function copyPrompt(id) {
+  const el = document.getElementById(id);
+  navigator.clipboard.writeText(el.textContent).then(() => showToast());
 }
 
-// 文字カウント
-document.getElementById('storyText').addEventListener('input', (e) => {
-  const count = e.target.value.length;
-  document.getElementById('charCount').textContent =
-    count >= 10000 ? `${(count / 10000).toFixed(1)}万文字` : `${count.toLocaleString()}文字`;
-});
-
-// 分割プレビュー
-async function previewChunks() {
-  const text = document.getElementById('storyText').value;
-  if (!text) return alert('テキストを入力してください');
-
-  const res = await fetch('/api/preview-chunks', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ storyText: text })
-  });
-  const data = await res.json();
-
-  const container = document.getElementById('chunkPreview');
-  container.classList.remove('hidden');
-  container.innerHTML = `<p style="margin-bottom:8px;color:var(--accent);font-size:13px;">
-    ${data.count}チャンクに分割されます（Phase 1で各チャンクを個別に精読）</p>` +
-    data.chunks.map(c => `
-      <div class="chunk-item">
-        <span class="label">${c.label}</span>
-        <span class="chars">${c.charCount.toLocaleString()}文字</span>
-      </div>
-    `).join('');
+function toggleCollapse(id) {
+  document.getElementById(id).classList.toggle('collapsed');
 }
 
-// タイマー
-function startTimer() {
-  startTime = Date.now();
-  timerInterval = setInterval(() => {
-    const elapsed = Math.floor((Date.now() - startTime) / 1000);
-    const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
-    const s = String(elapsed % 60).padStart(2, '0');
-    document.getElementById('elapsedTime').textContent = `${m}:${s}`;
-  }, 1000);
-}
-function stopTimer() { clearInterval(timerInterval); }
-
-// ログ追加
-function addLog(message, type = '') {
-  const log = document.getElementById('logContent');
-  const line = document.createElement('div');
-  line.className = `log-line ${type}`;
-  const time = new Date().toLocaleTimeString('ja-JP');
-  line.textContent = `[${time}] ${message}`;
-  log.appendChild(line);
-  log.parentElement.scrollTop = log.parentElement.scrollHeight;
-}
-
-// 分析開始
-async function startAnalysis() {
+// === Step 0: Start ===
+function startAnalysis() {
   const protagonist = document.getElementById('protagonist').value.trim();
   const storyText = document.getElementById('storyText').value.trim();
-
   if (!protagonist) return alert('主人公名を入力してください');
-  if (!storyText) return alert('テキストを入力してください');
+  if (!storyText) return alert('物語テキストを入力してください');
 
-  const config = {
-    model: document.getElementById('model').value,
+  storyMeta = {
     protagonist,
-    genre: document.getElementById('genre').value.trim() || '未指定',
-    theme: document.getElementById('theme').value.trim() || '（自動推定）',
-    symbols: document.getElementById('symbols').value.trim() || '（自動検出）',
-    keyCharacters: document.getElementById('keyCharacters').value.trim() || '（自動検出）',
-    storyText,
-    skipVerification: document.getElementById('skipVerification').checked
+    genre: document.getElementById('genre').value.trim(),
+    theme: document.getElementById('theme').value.trim(),
+    symbols: document.getElementById('symbols').value.trim(),
+    keyCharacters: document.getElementById('keyCharacters').value.trim(),
+    storyText
   };
 
-  // UI更新
-  document.getElementById('btnAnalyze').disabled = true;
-  document.getElementById('panel-progress').classList.remove('hidden');
-  document.getElementById('panel-results').classList.add('hidden');
-  document.getElementById('logContent').innerHTML = '';
-  resetPhases();
-  startTimer();
-  addLog('分析パイプラインを開始します', 'info');
+  generatePrompt(1);
+}
+
+// === Prompt Generation ===
+async function generatePrompt(phase, previousResult) {
+  const body = { phase, ...storyMeta };
+  if (previousResult) body.previousResult = previousResult;
 
   try {
-    const response = await fetch('/api/analyze', {
+    const res = await fetch('/api/build-prompt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config)
+      body: JSON.stringify(body)
     });
+    const data = await res.json();
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
+    const promptEl = document.getElementById(`p${phase}Prompt`);
+    const countEl = document.getElementById(`p${phase}CharCount`);
+    promptEl.textContent = data.prompt;
+    countEl.textContent = data.charCount.toLocaleString();
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n\n');
-      buffer = lines.pop();
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        try {
-          const data = JSON.parse(line.slice(6));
-          handleSSEEvent(data);
-        } catch (e) { /* skip parse errors */ }
-      }
+    if (phase === 1) { markDone(0); goStep(1); }
+    else if (phase === 2) { markDone(1); goStep(2); }
+    else if (phase === 3) { markDone(2); goStep(3); }
+    else if (phase === 4) {
+      document.getElementById('phase4Section').style.display = 'block';
+      document.getElementById('phase4Section').scrollIntoView({ behavior: 'smooth' });
     }
-  } catch (err) {
-    addLog(`致命的エラー: ${err.message}`, 'error');
-  } finally {
-    stopTimer();
-    document.getElementById('btnAnalyze').disabled = false;
+  } catch (e) {
+    alert('プロンプト生成エラー: ' + e.message);
   }
 }
 
-// SSEイベント処理
-function handleSSEEvent(data) {
-  if (data.type === 'progress') {
-    const { phase, status, message, progress } = data;
+// === Phase transitions ===
+function nextPhase(currentPhase) {
+  const response = document.getElementById(`p${currentPhase}Response`).value.trim();
+  if (!response) return alert('AIの回答を貼り付けてください');
+  if (response.length < 100) return alert('回答が短すぎます。AIの出力全文を貼り付けてください。');
 
-    if (status === 'start') {
-      setPhaseState(phase, 'active');
-      addLog(message, 'info');
-    } else if (status === 'complete') {
-      setPhaseState(phase, 'complete');
-      if (progress !== undefined) setProgress(phase, 100);
-      addLog(message, 'success');
-    } else if (status === 'error') {
-      setPhaseState(phase, 'error');
-      addLog(message, 'error');
-    } else if (status === 'warning') {
-      addLog(message, 'warning');
-    } else if (status === 'progress') {
-      if (progress !== undefined) setProgress(phase, progress);
-      addLog(message);
-    } else if (status === 'info') {
-      addLog(message, 'info');
-    } else if (status === 'done') {
-      addLog(message, 'success');
-    }
-  } else if (data.type === 'result') {
-    analysisResults = data.results;
-    displayResults(data.results);
-  } else if (data.type === 'done') {
-    addLog('全処理完了', 'success');
-  } else if (data.type === 'error') {
-    addLog(`エラー: ${data.message}`, 'error');
+  phaseResults[currentPhase] = response;
+  generatePrompt(currentPhase + 1, response);
+}
+
+// === Score Calculation ===
+async function calculateScores() {
+  const scoringText = document.getElementById('p3Response').value.trim();
+  if (!scoringText) return alert('Phase 3の回答を貼り付けてください');
+
+  phaseResults[3] = scoringText;
+
+  try {
+    const res = await fetch('/api/calculate-scores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scoringText })
+    });
+    const data = await res.json();
+
+    renderScores(data);
+    markDone(3);
+    goStep(4);
+  } catch (e) {
+    alert('スコア算出エラー: ' + e.message);
   }
 }
 
-// Phase状態管理
-function resetPhases() {
-  for (let i = 1; i <= 4; i++) {
-    const el = document.getElementById(`phase-${i}`);
-    el.className = 'phase-item';
-    setProgress(i, 0);
+function renderScores(data) {
+  const { scores, w1, w2, final: finalScore, weighted, coefficients, hasZero } = data;
+
+  // Auto-parse message
+  const msgEl = document.getElementById('autoParseMsg');
+  if (hasZero) {
+    msgEl.innerHTML = `<div class="instruction" style="border-left-color: var(--warn);">
+      ⚠️ 一部の項目でスコアが自動検出できませんでした（0点の項目）。<br>
+      下の表で手動修正して「再計算」ボタンを押してください。
+    </div>`;
+  } else {
+    msgEl.innerHTML = `<div class="instruction" style="border-left-color: var(--success);">
+      ✅ 14項目すべてのスコアを自動検出しました。
+    </div>`;
   }
-}
-function setPhaseState(phase, state) {
-  if (phase === 0) return;
-  const el = document.getElementById(`phase-${phase}`);
-  if (el) el.className = `phase-item ${state}`;
-}
-function setProgress(phase, pct) {
-  const el = document.getElementById(`progress-${phase}`);
-  if (el) el.style.width = `${pct}%`;
-}
 
-// 結果表示
-function displayResults(results) {
-  document.getElementById('panel-results').classList.remove('hidden');
-
-  // スコアサマリー
-  if (results.finalScore) {
-    const fs = results.finalScore;
-    document.getElementById('scoreSummary').innerHTML = `
-      <div class="score-card primary">
-        <div class="score-label">補正ESCスコア</div>
-        <div class="score-value">${fs.final}</div>
-        <div class="score-unit">/ 100</div>
-      </div>
-      <div class="score-card">
-        <div class="score-label">構成点 (W1)</div>
-        <div class="score-value">${fs.w1}</div>
-        <div class="score-unit">/ 100</div>
-      </div>
-      <div class="score-card">
-        <div class="score-label">ESCスコア (W2)</div>
-        <div class="score-value">${fs.w2}</div>
-        <div class="score-unit">/ 100</div>
-      </div>
+  // Score table
+  const tbody = document.getElementById('scoreBody');
+  tbody.innerHTML = '';
+  scores.forEach((s, i) => {
+    const cls = s >= 8.5 ? 'score-high' : s >= 7.0 ? 'score-mid' : 'score-low';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${String(i+1).padStart(2,'0')}</td>
+      <td>${ITEM_NAMES[i]}</td>
+      <td class="score-cell"><input type="number" class="score-input" min="0" max="10" step="0.1" value="${s}" data-idx="${i}"></td>
+      <td style="text-align:center; color:var(--text2);">×${coefficients[i].toFixed(2)}</td>
+      <td class="score-cell ${cls}">${weighted[i]}</td>
     `;
-  }
+    tbody.appendChild(tr);
+  });
 
-  // デフォルトで採点結果タブ
-  switchTab('scoring');
+  // Add recalculate row
+  const recalcRow = document.createElement('tr');
+  recalcRow.innerHTML = `<td colspan="5" style="text-align:center; padding-top:12px;">
+    <button class="btn btn-secondary" onclick="recalculate()">🔄 手動修正後に再計算</button>
+  </td>`;
+  tbody.appendChild(recalcRow);
 
-  // 結果パネルまでスクロール
-  document.getElementById('panel-results').scrollIntoView({ behavior: 'smooth' });
+  // Final scores
+  const color = parseFloat(finalScore) >= 85 ? 'var(--success)' : parseFloat(finalScore) >= 70 ? 'var(--warn)' : 'var(--danger)';
+  document.getElementById('finalScore').textContent = finalScore + '点';
+  document.getElementById('finalScore').style.color = color;
+  document.getElementById('w1Score').textContent = w1 + '点';
+  document.getElementById('w2Score').textContent = w2 + '点';
 }
 
-// タブ切替
-function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  event.target.classList.add('active');
+function recalculate() {
+  const inputs = document.querySelectorAll('.score-input');
+  const scores = [];
+  inputs.forEach(inp => scores.push(parseFloat(inp.value) || 0));
 
-  const content = document.getElementById('resultContent');
-  if (!analysisResults) { content.textContent = '結果がありません'; return; }
+  const w1 = scores.reduce((a,b) => a+b, 0) / 14;
+  const weighted = scores.map((s,i) => s * ESC_COEFFICIENTS[i]);
+  const escTotal = 16.0;
+  const w2 = weighted.reduce((a,b) => a+b, 0) / escTotal;
+  const final = w1 * 10 * 0.7 + w2 * 10 * 0.3;
 
-  const phases = analysisResults.phases;
-  switch (tab) {
-    case 'scoring':
-      content.textContent = phases.scoring || '採点結果がありません';
-      break;
-    case 'mapping':
-      content.textContent = phases.mapping || '構造マッピングがありません';
-      break;
-    case 'extraction':
-      if (phases.extraction) {
-        content.textContent = phases.extraction.map(e =>
-          `${'='.repeat(60)}\n${e.label}\n${'='.repeat(60)}\n\n${e.result}`
-        ).join('\n\n');
-      } else {
-        content.textContent = '精読データがありません';
-      }
-      break;
-    case 'verification':
-      content.textContent = phases.verification || '検証結果がありません（Phase 4をスキップした場合）';
-      break;
-  }
+  renderScores({
+    scores, w1: (w1*10).toFixed(1), w2: (w2*10).toFixed(1),
+    final: final.toFixed(1), weighted: weighted.map(w => w.toFixed(2)),
+    coefficients: ESC_COEFFICIENTS, hasZero: scores.some(s => s === 0)
+  });
+  showToast('再計算しました');
 }
 
-// コピー
-function copyResults() {
-  if (!analysisResults?.phases?.scoring) return alert('結果がありません');
-  navigator.clipboard.writeText(analysisResults.phases.scoring)
-    .then(() => alert('コピーしました'))
-    .catch(() => alert('コピーに失敗しました'));
+// === Phase 4 ===
+function generatePhase4() {
+  if (!phaseResults[3]) return alert('Phase 3の結果がありません');
+  generatePrompt(4, phaseResults[3]);
 }
 
-// ダウンロード
-function downloadResults() {
-  if (!analysisResults) return alert('結果がありません');
+// === Export ===
+function exportReport() {
+  const scores = [];
+  document.querySelectorAll('.score-input').forEach(inp => scores.push(parseFloat(inp.value) || 0));
+  const w1val = scores.reduce((a,b) => a+b, 0) / 14;
+  const weighted = scores.map((s,i) => s * ESC_COEFFICIENTS[i]);
+  const w2val = weighted.reduce((a,b) => a+b, 0) / 16.0;
+  const finalVal = w1val * 10 * 0.7 + w2val * 10 * 0.3;
 
-  let md = `# SL Score 採点結果\n\n`;
-  md += `**生成日時**: ${new Date().toLocaleString('ja-JP')}\n\n`;
+  let md = `# Structural Logical Score（構造論理点）採点結果\n`;
+  md += `## ガイドライン Ver.13.1A 準拠\n\n---\n\n`;
+  md += `## 評価前提\n\n`;
+  md += `- **主人公／視点主**：${storyMeta.protagonist}\n`;
+  if (storyMeta.genre) md += `- **ジャンル**：${storyMeta.genre}\n`;
+  if (storyMeta.theme) md += `- **主題の問い**：${storyMeta.theme}\n`;
+  if (storyMeta.symbols) md += `- **構造の対比軸**：${storyMeta.symbols}\n`;
+  md += `\n---\n\n`;
 
-  if (analysisResults.finalScore) {
-    const fs = analysisResults.finalScore;
-    md += `## スコアサマリー\n`;
-    md += `- 補正ESCスコア: **${fs.final}点**\n`;
-    md += `- 構成点(W1): ${fs.w1}点\n`;
-    md += `- ESCスコア(W2): ${fs.w2}点\n\n`;
+  md += `## 採点一覧\n\n`;
+  md += `| No. | 項目 | 点数 |\n|-----|------|------|\n`;
+  scores.forEach((s, i) => {
+    md += `| ${String(i+1).padStart(2,'0')} | ${ITEM_NAMES[i]} | ${s.toFixed(1)} |\n`;
+  });
+  md += `\n**構成点（W1）平均：${(w1val*10).toFixed(1)}点 / 100**\n\n`;
+
+  md += `---\n\n## ESCスコア算出\n\n`;
+  md += `| No. | 素点 | ESC係数 | 加重点 |\n|-----|------|---------|--------|\n`;
+  scores.forEach((s, i) => {
+    md += `| ${String(i+1).padStart(2,'0')} | ${s.toFixed(1)} | ${ESC_COEFFICIENTS[i].toFixed(2)} | ${weighted[i].toFixed(2)} |\n`;
+  });
+  md += `\n**ESC加重合計：${weighted.reduce((a,b)=>a+b,0).toFixed(2)}**\n`;
+  md += `**ESCスコア（W2）：${(w2val*10).toFixed(1)}点**\n\n`;
+
+  md += `---\n\n## 補正ESCスコア（最終合成）\n\n`;
+  md += `**W1 × 0.7 ＋ W2 × 0.3 = ${(w1val*10*0.7).toFixed(2)} ＋ ${(w2val*10*0.3).toFixed(2)} = ${finalVal.toFixed(1)}点**\n\n`;
+
+  if (phaseResults[3]) {
+    md += `---\n\n## AIによる採点詳細（Phase 3出力）\n\n${phaseResults[3]}\n`;
   }
 
-  md += `---\n\n## 採点結果\n\n${analysisResults.phases.scoring || ''}\n\n`;
-  md += `---\n\n## 構造マッピング\n\n${analysisResults.phases.mapping || ''}\n\n`;
-
-  if (analysisResults.phases.verification) {
-    md += `---\n\n## 逆方向検証\n\n${analysisResults.phases.verification}\n\n`;
-  }
-
-  if (analysisResults.errors?.length) {
-    md += `---\n\n## エラーログ\n\n${analysisResults.errors.map(e => `- ${e}`).join('\n')}\n`;
-  }
+  md += `\n---\n*採点日：${new Date().toLocaleDateString('ja-JP')}*\n`;
+  md += `*ツール：SL Score 構造分析ツール v3.0（ハイブリッド版）*\n`;
 
   const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `SL_Score_結果_${new Date().toISOString().slice(0, 10)}.md`;
+  a.download = `SLScore_${storyMeta.protagonist}_${new Date().toISOString().slice(0,10)}.md`;
   a.click();
   URL.revokeObjectURL(url);
+  showToast('レポートをダウンロードしました');
 }
+
+// === Init ===
+document.addEventListener('DOMContentLoaded', () => {
+  checkAuth();
+  const ta = document.getElementById('storyText');
+  ta.addEventListener('input', () => {
+    document.getElementById('charCount').textContent = ta.value.length.toLocaleString();
+  });
+});
