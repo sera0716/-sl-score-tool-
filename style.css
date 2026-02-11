@@ -1,0 +1,143 @@
+/* SL Score v3.0 ハイブリッド版 */
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #242837;
+  --border: #2e3348;
+  --text: #e4e6f0;
+  --text2: #9498b0;
+  --accent: #6c7bff;
+  --accent2: #4a56d6;
+  --success: #34d399;
+  --warn: #fbbf24;
+  --danger: #f87171;
+  --phase1: #6c7bff;
+  --phase2: #a78bfa;
+  --phase3: #f59e0b;
+  --phase4: #34d399;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background: var(--bg); color: var(--text); font-family: 'Segoe UI','Hiragino Sans',sans-serif; line-height:1.6; }
+a { color: var(--accent); }
+
+/* Header */
+.header { background: var(--surface); border-bottom:1px solid var(--border); padding:12px 24px; display:flex; justify-content:space-between; align-items:center; }
+.header h1 { font-size:18px; font-weight:700; }
+.header h1 span { color: var(--accent); }
+.header-right { display:flex; gap:12px; align-items:center; }
+.header .version { color: var(--text2); font-size:12px; background: var(--surface2); padding:2px 8px; border-radius:4px; }
+.btn-sm { background: var(--surface2); color: var(--text2); border:1px solid var(--border); padding:4px 12px; border-radius:4px; cursor:pointer; font-size:13px; }
+.btn-sm:hover { background: var(--border); color: var(--text); }
+
+/* Layout */
+.container { max-width:1100px; margin:0 auto; padding:24px 16px; }
+
+/* Steps */
+.steps { display:flex; gap:4px; margin-bottom:32px; background: var(--surface); border-radius:8px; padding:6px; }
+.step-tab { flex:1; text-align:center; padding:10px 8px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600; color: var(--text2); transition: all .2s; position:relative; }
+.step-tab.active { background: var(--surface2); color: var(--text); }
+.step-tab.done { color: var(--success); }
+.step-tab .step-num { display:inline-block; width:22px; height:22px; line-height:22px; border-radius:50%; font-size:11px; margin-right:4px; background: var(--surface2); }
+.step-tab.active .step-num { background: var(--accent); color:#fff; }
+.step-tab.done .step-num { background: var(--success); color:#000; }
+
+/* Panels */
+.panel { display:none; }
+.panel.active { display:block; }
+.card { background: var(--surface); border:1px solid var(--border); border-radius:8px; padding:20px; margin-bottom:16px; }
+.card h2 { font-size:16px; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+.card h2 .badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; }
+.phase1 .badge { background: var(--phase1); color:#fff; }
+.phase2 .badge { background: var(--phase2); color:#fff; }
+.phase3 .badge { background: var(--phase3); color:#000; }
+.phase4 .badge { background: var(--phase4); color:#000; }
+
+/* Form */
+.form-group { margin-bottom:14px; }
+.form-group label { display:block; font-size:13px; color: var(--text2); margin-bottom:4px; font-weight:600; }
+.form-group .required { color: var(--danger); }
+input[type=text], textarea, select {
+  width:100%; background: var(--surface2); border:1px solid var(--border); color: var(--text);
+  padding:10px 12px; border-radius:6px; font-size:14px; font-family:inherit;
+}
+textarea { resize:vertical; min-height:120px; }
+textarea:focus, input:focus { outline:none; border-color: var(--accent); }
+.char-count { font-size:12px; color: var(--text2); text-align:right; margin-top:2px; }
+
+/* Buttons */
+.btn { padding:10px 24px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer; border:none; transition: all .15s; }
+.btn-primary { background: var(--accent); color:#fff; }
+.btn-primary:hover { background: var(--accent2); }
+.btn-primary:disabled { opacity:.4; cursor:not-allowed; }
+.btn-secondary { background: var(--surface2); color: var(--text); border:1px solid var(--border); }
+.btn-secondary:hover { background: var(--border); }
+.btn-success { background: var(--success); color:#000; }
+.btn-success:hover { opacity:.9; }
+.btn-row { display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; }
+
+/* Prompt display */
+.prompt-box {
+  background: #111318; border:1px solid var(--border); border-radius:6px;
+  padding:16px; font-size:13px; line-height:1.7; max-height:400px; overflow-y:auto;
+  white-space: pre-wrap; word-break: break-all; color: var(--text2);
+  font-family: 'Consolas','Monaco','Hiragino Kaku Gothic ProN', monospace;
+}
+.prompt-box.collapsed { max-height:150px; }
+
+/* Response input */
+.response-area { min-height:200px; font-family: 'Consolas','Monaco',monospace; font-size:13px; }
+
+/* Score table */
+.score-table { width:100%; border-collapse:collapse; margin-top:12px; }
+.score-table th, .score-table td { padding:8px 12px; text-align:left; border-bottom:1px solid var(--border); font-size:13px; }
+.score-table th { color: var(--text2); font-weight:600; background: var(--surface2); }
+.score-table .score-cell { text-align:center; font-weight:700; font-size:15px; }
+.score-high { color: var(--success); }
+.score-mid { color: var(--warn); }
+.score-low { color: var(--danger); }
+
+/* Final score */
+.final-score-box { text-align:center; padding:32px; background: linear-gradient(135deg, var(--surface), var(--surface2)); border-radius:12px; margin:20px 0; }
+.final-score-box .label { font-size:14px; color: var(--text2); margin-bottom:8px; }
+.final-score-box .score { font-size:56px; font-weight:800; }
+.final-score-box .sub-scores { display:flex; justify-content:center; gap:32px; margin-top:16px; }
+.final-score-box .sub-score { text-align:center; }
+.final-score-box .sub-score .val { font-size:24px; font-weight:700; }
+.final-score-box .sub-score .lbl { font-size:12px; color: var(--text2); }
+
+/* Instructions */
+.instruction { background: var(--surface2); border-left:3px solid var(--accent); padding:12px 16px; border-radius:0 6px 6px 0; margin-bottom:16px; font-size:13px; color: var(--text2); }
+.instruction strong { color: var(--text); }
+.instruction ol { margin-top:8px; padding-left:20px; }
+.instruction li { margin-bottom:4px; }
+
+/* Copy feedback */
+.copy-toast {
+  position:fixed; top:20px; left:50%; transform:translateX(-50%);
+  background: var(--success); color:#000; padding:8px 20px; border-radius:6px;
+  font-weight:600; font-size:14px; z-index:999; opacity:0; transition: opacity .3s;
+  pointer-events:none;
+}
+.copy-toast.show { opacity:1; }
+
+/* Responsive */
+@media (max-width:768px) {
+  .steps { flex-wrap:wrap; }
+  .step-tab { font-size:11px; padding:8px 4px; }
+  .container { padding:12px 8px; }
+}
+
+/* Phase indicator */
+.phase-indicator { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text2); margin-bottom:8px; }
+.phase-dot { width:8px; height:8px; border-radius:50%; }
+.phase-dot.p1 { background: var(--phase1); }
+.phase-dot.p2 { background: var(--phase2); }
+.phase-dot.p3 { background: var(--phase3); }
+.phase-dot.p4 { background: var(--phase4); }
+
+/* Manual score input */
+.score-input { width:60px; text-align:center; padding:6px; font-size:14px; font-weight:700; }
+.score-input:invalid { border-color: var(--danger); }
+
+/* Collapse toggle */
+.toggle-btn { background:none; border:none; color:var(--accent); cursor:pointer; font-size:12px; margin-left:8px; }
