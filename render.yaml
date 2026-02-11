@@ -5,8 +5,6 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
-      - key: GEMINI_API_KEY
-        sync: false
       - key: ADMIN_DEFAULT_PASSWORD
         sync: false
       - key: SESSION_SECRET

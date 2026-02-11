@@ -1,8 +1,8 @@
 {
   "name": "sl-score-tool",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "version": "3.0.0",
+  "description": "SL Score 構造分析ツール v3.0 ハイブリッド版",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js"
@@ -17,7 +17,6 @@
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
-    "express-session": "^1.19.0",
-    "groq-sdk": "^0.37.0"
+    "express-session": "^1.19.0"
   }
 }
